@@ -1,9 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId, getOptionalAuthUserId } from "./auth";
 
 // ═══════════════════════════════════════════════════════════════
 // PLAYLISTS — Hand-curated ordered lists. User-owned.
-// Public playlists shareable at /p/[slug].
+// Auth: userId derived server-side, never from client args.
 // ═══════════════════════════════════════════════════════════════
 
 export const getBySlug = query({
@@ -16,7 +17,13 @@ export const getBySlug = query({
 
     if (!playlist) return null;
 
-    // Fetch video details for each video in the playlist
+    // Public playlists are viewable by anyone
+    // Private playlists require auth check
+    if (!playlist.isPublic) {
+      const userId = await getOptionalAuthUserId(ctx);
+      if (userId !== playlist.userId) return null;
+    }
+
     const videos = [];
     for (const videoId of playlist.videoIds) {
       const video = await ctx.db.get(videoId);
@@ -45,11 +52,14 @@ export const getBySlug = query({
 });
 
 export const listUserPlaylists = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getOptionalAuthUserId(ctx);
+    if (!userId) return [];
+
     return await ctx.db
       .query("playlists")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
   },
 });
@@ -59,11 +69,11 @@ export const create = mutation({
     name: v.string(),
     slug: v.string(),
     description: v.optional(v.string()),
-    userId: v.string(),
     isPublic: v.boolean(),
   },
   handler: async (ctx, args) => {
-    // Check duplicate slug
+    const userId = await getAuthUserId(ctx);
+
     const existing = await ctx.db
       .query("playlists")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -74,7 +84,7 @@ export const create = mutation({
       name: args.name,
       slug: args.slug,
       description: args.description,
-      userId: args.userId,
+      userId,
       isPublic: args.isPublic,
       videoIds: [],
     });
@@ -85,14 +95,13 @@ export const addVideo = mutation({
   args: {
     playlistId: v.id("playlists"),
     videoId: v.id("videos"),
-    userId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
     const playlist = await ctx.db.get(args.playlistId);
     if (!playlist) throw new Error("Playlist not found");
-    if (playlist.userId !== args.userId) throw new Error("Not your playlist");
+    if (playlist.userId !== userId) throw new Error("Not your playlist");
 
-    // Don't add duplicates
     if (playlist.videoIds.includes(args.videoId)) return;
 
     await ctx.db.patch(args.playlistId, {
@@ -105,12 +114,12 @@ export const removeVideo = mutation({
   args: {
     playlistId: v.id("playlists"),
     videoId: v.id("videos"),
-    userId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
     const playlist = await ctx.db.get(args.playlistId);
     if (!playlist) throw new Error("Playlist not found");
-    if (playlist.userId !== args.userId) throw new Error("Not your playlist");
+    if (playlist.userId !== userId) throw new Error("Not your playlist");
 
     await ctx.db.patch(args.playlistId, {
       videoIds: playlist.videoIds.filter((id) => id !== args.videoId),
@@ -119,11 +128,12 @@ export const removeVideo = mutation({
 });
 
 export const remove = mutation({
-  args: { playlistId: v.id("playlists"), userId: v.string() },
+  args: { playlistId: v.id("playlists") },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
     const playlist = await ctx.db.get(args.playlistId);
     if (!playlist) throw new Error("Playlist not found");
-    if (playlist.userId !== args.userId) throw new Error("Not your playlist");
+    if (playlist.userId !== userId) throw new Error("Not your playlist");
 
     await ctx.db.delete(args.playlistId);
   },

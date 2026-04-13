@@ -10,23 +10,21 @@ import { nanoid } from "nanoid";
 
 interface UserActionsProps {
   videoId?: Id<"videos">;
-  artist?: string;
 }
 
-export function UserActions({ videoId, artist }: UserActionsProps) {
-  const { user, isSignedIn } = useUser();
+export function UserActions({ videoId }: UserActionsProps) {
+  const { isSignedIn } = useUser();
   const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
 
-  const userId = user?.id ?? "";
-
+  // Queries — auth derived server-side, no userId arg needed
   const isFavorited = useQuery(
     api.favorites.isFavorited,
-    isSignedIn && videoId ? { userId, videoId } : "skip"
+    isSignedIn && videoId ? { videoId } : "skip"
   );
   const userPlaylists = useQuery(
     api.playlists.listUserPlaylists,
-    isSignedIn ? { userId } : "skip"
+    isSignedIn ? {} : "skip"
   );
 
   const toggleFavorite = useMutation(api.favorites.toggle);
@@ -48,7 +46,7 @@ export function UserActions({ videoId, artist }: UserActionsProps) {
       {/* Favorite toggle */}
       {videoId && (
         <button
-          onClick={() => toggleFavorite({ userId, videoId })}
+          onClick={() => toggleFavorite({ videoId })}
           className={`p-2 transition-colors ${
             isFavorited
               ? "text-accent-pink"
@@ -86,11 +84,7 @@ export function UserActions({ videoId, artist }: UserActionsProps) {
                     <button
                       key={pl._id}
                       onClick={() => {
-                        addToPlaylist({
-                          playlistId: pl._id,
-                          videoId,
-                          userId,
-                        });
+                        addToPlaylist({ playlistId: pl._id, videoId });
                         setShowPlaylistPicker(false);
                       }}
                       className="w-full text-left px-2 py-1.5 text-sm font-sans text-text-primary hover:bg-bg-surface transition-colors"
@@ -112,13 +106,15 @@ export function UserActions({ videoId, artist }: UserActionsProps) {
                       createPlaylist({
                         name: newPlaylistName.trim(),
                         slug: nanoid(10),
-                        userId,
                         isPublic: true,
                       }).then((playlistId) => {
-                        addToPlaylist({ playlistId, videoId, userId });
+                        addToPlaylist({ playlistId, videoId });
                         setNewPlaylistName("");
                         setShowPlaylistPicker(false);
                       });
+                    }
+                    if (e.key === "Escape") {
+                      setShowPlaylistPicker(false);
                     }
                   }}
                 />

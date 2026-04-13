@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as artistEnrich from "../artistEnrich.js";
+import type * as auth from "../auth.js";
 import type * as channels from "../channels.js";
 import type * as crons from "../crons.js";
 import type * as editorialSynth from "../editorialSynth.js";
@@ -28,6 +29,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   artistEnrich: typeof artistEnrich;
+  auth: typeof auth;
   channels: typeof channels;
   crons: typeof crons;
   editorialSynth: typeof editorialSynth;

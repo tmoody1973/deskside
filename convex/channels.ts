@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
+import { getAuthUserId, getOptionalAuthUserId } from "./auth";
 
 // ═══════════════════════════════════════════════════════════════
 // CHANNELS — Saved filters as TV stations.
@@ -53,11 +53,14 @@ export const listBuiltIn = query({
 });
 
 export const listUserChannels = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getOptionalAuthUserId(ctx);
+    if (!userId) return [];
+
     return await ctx.db
       .query("channels")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
   },
 });
@@ -74,16 +77,15 @@ export const create = mutation({
       regions: v.optional(v.array(v.string())),
       vibeTags: v.optional(v.array(v.string())),
     }),
-    userId: v.string(),
     isPublic: v.boolean(),
   },
   handler: async (ctx, args) => {
-    // Validate slug isn't reserved
+    const userId = await getAuthUserId(ctx);
+
     if (RESERVED_SLUGS.includes(args.slug)) {
       throw new Error(`Slug "${args.slug}" is reserved for built-in channels`);
     }
 
-    // Check for duplicate slug
     const existing = await ctx.db
       .query("channels")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -98,19 +100,20 @@ export const create = mutation({
       description: args.description,
       isBuiltIn: false,
       filters: args.filters,
-      userId: args.userId,
+      userId,
       isPublic: args.isPublic,
     });
   },
 });
 
 export const remove = mutation({
-  args: { channelId: v.id("channels"), userId: v.string() },
+  args: { channelId: v.id("channels") },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
     const channel = await ctx.db.get(args.channelId);
     if (!channel) throw new Error("Channel not found");
     if (channel.isBuiltIn) throw new Error("Cannot delete built-in channels");
-    if (channel.userId !== args.userId) throw new Error("Not your channel");
+    if (channel.userId !== userId) throw new Error("Not your channel");
 
     await ctx.db.delete(args.channelId);
   },

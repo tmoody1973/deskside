@@ -479,10 +479,7 @@ export default function Home() {
               <span className="hidden sm:inline">Info</span>
             </button>
             {/* Auth: sign in, favorites, playlists */}
-            <UserActions
-              videoId={currentVideo?._id}
-              artist={currentVideo?.artist ?? undefined}
-            />
+            <UserActions videoId={currentVideo?._id} />
             <button
               onClick={() => setShowAbout(true)}
               className="p-2 text-text-tertiary hover:text-text-secondary transition-colors text-[10px] font-sans font-bold uppercase tracking-widest"

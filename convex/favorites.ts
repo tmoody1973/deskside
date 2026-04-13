@@ -1,17 +1,21 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId, getOptionalAuthUserId } from "./auth";
 
 // ═══════════════════════════════════════════════════════════════
 // FAVORITES — User heart video. Toggle on/off.
+// Auth: userId derived server-side, never from client args.
 // ═══════════════════════════════════════════════════════════════
 
 export const toggle = mutation({
-  args: { userId: v.string(), videoId: v.id("videos") },
+  args: { videoId: v.id("videos") },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+
     const existing = await ctx.db
       .query("favorites")
       .withIndex("by_userId_videoId", (q) =>
-        q.eq("userId", args.userId).eq("videoId", args.videoId)
+        q.eq("userId", userId).eq("videoId", args.videoId)
       )
       .first();
 
@@ -21,7 +25,7 @@ export const toggle = mutation({
     }
 
     await ctx.db.insert("favorites", {
-      userId: args.userId,
+      userId,
       videoId: args.videoId,
     });
     return { favorited: true };
@@ -29,12 +33,15 @@ export const toggle = mutation({
 });
 
 export const isFavorited = query({
-  args: { userId: v.string(), videoId: v.id("videos") },
+  args: { videoId: v.id("videos") },
   handler: async (ctx, args) => {
+    const userId = await getOptionalAuthUserId(ctx);
+    if (!userId) return false;
+
     const existing = await ctx.db
       .query("favorites")
       .withIndex("by_userId_videoId", (q) =>
-        q.eq("userId", args.userId).eq("videoId", args.videoId)
+        q.eq("userId", userId).eq("videoId", args.videoId)
       )
       .first();
     return !!existing;
@@ -42,11 +49,14 @@ export const isFavorited = query({
 });
 
 export const listUserFavorites = query({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getOptionalAuthUserId(ctx);
+    if (!userId) return [];
+
     const favorites = await ctx.db
       .query("favorites")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
 
     const videos = [];

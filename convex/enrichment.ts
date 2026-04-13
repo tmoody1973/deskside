@@ -390,6 +390,8 @@ export const processBatch = internalAction({
 // Public entry points
 // ───────────────────────────────────────────────────────────────
 
+// Pipeline entry points — internal only (no public access)
+// Use `npx convex run enrichment:startParsing` from CLI to trigger.
 export const startParsing = action({
   args: {},
   handler: async (ctx): Promise<string> => {
