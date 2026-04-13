@@ -36,7 +36,9 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false); // Full audio after splash click
   const [splashDismissed, setSplashDismissed] = useState(false);
+  const [showKeyHints, setShowKeyHints] = useState(true);
   const [captionsOn, setCaptionsOn] = useState(false);
+  const [channelBug, setChannelBug] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
@@ -152,7 +154,8 @@ export default function Home() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (showGrid && e.key !== "Escape") return; // Let grid handle its own keys
+      setShowKeyHints(false); // Dismiss hints on any keypress
+      if (showGrid && e.key !== "Escape") return;
 
       switch (e.key) {
         case "ArrowRight": case "l": e.preventDefault(); handleNext(); break;
@@ -203,7 +206,8 @@ export default function Home() {
   return (
     <div className="fixed inset-0 bg-bg overflow-hidden">
       {/* ═══ FULL-SCREEN VIDEO ═══ */}
-      {currentVideoId && !showSplash && (
+      {/* Only render after user clicks splash (satisfies browser autoplay policy) */}
+      {currentVideoId && splashDismissed && (
         <div className="absolute inset-0 w-full h-full">
           <ReactPlayer
             ref={playerRef}
@@ -222,35 +226,12 @@ export default function Home() {
             } as any}
             onReady={() => {
               setPlayerReady(true);
-              setIsPlaying(true); // Auto-play after splash
             }}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onEnded={handleNext}
           />
         </div>
-      )}
-      {/* TAP FOR SOUND — muted autoplay, user clicks to unmute */}
-      {needsUnmute && !showSplash && !showTitleCard && isPlaying && (
-        <button
-          onClick={() => {
-            setIsMuted(false);
-            setNeedsUnmute(false);
-          }}
-          className="absolute inset-0 z-30 flex items-end justify-center pb-32 cursor-pointer"
-          aria-label="Tap for sound"
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-3 px-6 py-3 bg-bg/80 backdrop-blur-sm border-2 border-accent-yellow"
-          >
-            <VolumeX size={20} strokeWidth={2.5} className="text-accent-yellow" />
-            <span className="font-sans font-bold text-sm text-accent-yellow uppercase tracking-wider">
-              Tap for Sound
-            </span>
-          </motion.div>
-        </button>
       )}
 
       {/* Cover YouTube's built-in title/info bar at the top */}
@@ -298,6 +279,19 @@ export default function Home() {
               transition={{ duration: 0.6, delay: 1.2 }}
               className="h-1 bg-accent-pink mx-auto mt-10"
             />
+            {/* PRESS PLAY button — the click satisfies browser autoplay policy */}
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 1.8 }}
+              onClick={handleSplashEnter}
+              className="mt-12 px-8 py-3 border-[3px] border-accent-yellow text-accent-yellow font-display text-lg uppercase tracking-widest hover:bg-accent-yellow hover:text-bg transition-colors shadow-retro-yellow active:translate-x-[6px] active:translate-y-[6px] active:shadow-none"
+            >
+              <span className="flex items-center gap-3">
+                <Play size={20} strokeWidth={2.5} />
+                Press Play
+              </span>
+            </motion.button>
           </motion.div>
         </div>
       )}
@@ -358,8 +352,8 @@ export default function Home() {
 
       {/* ═══ BOTTOM BAR: TRANSPORT + FILMSTRIP ═══ */}
       <div className="absolute bottom-0 left-0 right-0 z-20 bg-[rgba(10,10,15,0.85)] backdrop-blur-[16px] border-t border-border/20">
-        {/* Filmstrip (scrollable thumbnails) — shows when paused */}
-        {!isPlaying && videos.length > 0 && (
+        {/* Filmstrip (scrollable thumbnails) — always visible */}
+        {videos.length > 0 && (
           <div className="px-4 pt-3 pb-2 overflow-x-auto">
             <div className="flex gap-2" style={{ minWidth: "max-content" }}>
               {videos.map((video, i) => (
@@ -404,8 +398,13 @@ export default function Home() {
             <select
               value={selectedGenre ?? ""}
               onChange={(e) => {
-                setSelectedGenre(e.target.value === "" ? null : e.target.value);
+                const genre = e.target.value === "" ? null : e.target.value;
+                setSelectedGenre(genre);
                 setCurrentIndex(0);
+                // Show channel bug
+                const bugText = genre ? `CH · ${genre.toUpperCase()}` : "ALL CHANNELS";
+                setChannelBug(bugText);
+                setTimeout(() => setChannelBug(null), 3000);
               }}
               className="bg-transparent border-2 border-border/40 text-text-primary font-sans text-xs uppercase tracking-wider px-3 py-2 appearance-none cursor-pointer hover:border-accent-yellow transition-colors"
             >
@@ -584,6 +583,56 @@ export default function Home() {
       )}
       </AnimatePresence>
 
+      {/* ═══ CHANNEL BUG (appears on channel switch) ═══ */}
+      <AnimatePresence>
+        {channelBug && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="absolute top-4 left-4 z-20 px-4 py-2 bg-[rgba(10,10,15,0.8)] backdrop-blur-sm border-2 border-accent-yellow"
+          >
+            <span className="font-sans font-bold text-sm text-accent-yellow uppercase tracking-widest">
+              {channelBug}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══ KEYBOARD HINTS (first visit, dismisses on any keypress) ═══ */}
+      {showKeyHints && splashDismissed && !showGrid && !showInfo && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="absolute bottom-24 right-4 z-20 bg-bg/80 backdrop-blur-sm border border-border-dim p-3 space-y-1"
+        >
+          <p className="text-text-tertiary text-[10px] font-sans font-bold uppercase tracking-widest mb-2">
+            Keyboard Shortcuts
+          </p>
+          {[
+            ["Space", "Play / Pause"],
+            ["← →", "Prev / Next"],
+            ["G", "Open Grid"],
+            ["I", "Artist Info"],
+            ["S", "Shuffle"],
+            ["C", "Captions"],
+            ["M", "Mute"],
+          ].map(([key, label]) => (
+            <div key={key} className="flex items-center gap-2">
+              <span className="inline-block px-1.5 py-0.5 text-[10px] font-mono bg-accent-cyan text-bg font-bold min-w-[28px] text-center">
+                {key}
+              </span>
+              <span className="text-text-tertiary text-[10px] font-sans">{label}</span>
+            </div>
+          ))}
+          <p className="text-text-tertiary text-[9px] font-sans mt-2 italic">
+            Press any key to dismiss
+          </p>
+        </motion.div>
+      )}
+
       {/* ═══ INFO OVERLAY (slides from right) ═══ */}
       <AnimatePresence>
       {showInfo && (
@@ -658,9 +707,20 @@ export default function Home() {
                   {videoDetails.editorial}
                 </p>
               ) : (
-                <p className="font-sans text-text-tertiary text-sm italic mb-6">
-                  Editorial blurb loading...
-                </p>
+                <div className="mb-6">
+                  {/* Fallback: show classification data while editorial synth runs */}
+                  {currentVideo.primaryGenre && (
+                    <p className="font-sans text-text-secondary text-sm mb-2">
+                      {currentVideo.artist} performs {currentVideo.primaryGenre}
+                      {currentVideo.moods && currentVideo.moods.length > 0 && (
+                        <span> with a {currentVideo.moods.join(", ")} energy</span>
+                      )}.
+                    </p>
+                  )}
+                  <p className="font-sans text-text-tertiary text-xs italic">
+                    Full liner notes arriving soon.
+                  </p>
+                </div>
               )}
 
               {/* Genre + moods */}
