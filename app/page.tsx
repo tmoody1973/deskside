@@ -20,8 +20,10 @@ import {
   Search,
   Info,
   Captions,
+  Heart,
 } from "lucide-react";
 import { UserActions } from "@/components/UserActions";
+import { LibraryOverlay } from "@/components/LibraryOverlay";
 
 /**
  * Deskside — video-first interface.
@@ -39,6 +41,7 @@ export default function Home() {
   const [splashDismissed, setSplashDismissed] = useState(false);
   const [showKeyHints, setShowKeyHints] = useState(true);
   const [showAbout, setShowAbout] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
   const [channelBug, setChannelBug] = useState<string | null>(null);
   const [showFilmstrip, setShowFilmstrip] = useState(true);
@@ -170,6 +173,7 @@ export default function Home() {
         case "g": e.preventDefault(); setShowGrid((v) => !v); break;
         case "c": e.preventDefault(); setCaptionsOn((v) => !v); break;
         case "h": e.preventDefault(); setShowFilmstrip((v) => !v); break;
+        case "f": e.preventDefault(); setShowLibrary((v) => !v); break;
         case "Escape":
           e.preventDefault();
           if (showInfo) setShowInfo(false);
@@ -421,6 +425,15 @@ export default function Home() {
                 </option>
               ))}
             </select>
+            {/* Library button */}
+            <button
+              onClick={() => setShowLibrary(!showLibrary)}
+              className="p-2.5 border-2 border-border/40 text-text-primary hover:text-accent-pink hover:border-accent-pink transition-colors"
+              aria-label="Your library"
+              title="Favorites & Playlists"
+            >
+              <Heart size={16} strokeWidth={2.5} />
+            </button>
           </div>
 
           {/* Center: now playing + transport */}
@@ -482,8 +495,9 @@ export default function Home() {
             <UserActions videoId={currentVideo?._id} />
             <button
               onClick={() => setShowAbout(true)}
-              className="p-2 text-text-tertiary hover:text-text-secondary transition-colors text-[10px] font-sans font-bold uppercase tracking-widest"
+              className="p-2 border-2 border-border/40 text-text-secondary hover:text-accent-yellow hover:border-accent-yellow transition-colors text-xs font-sans font-bold"
               aria-label="About Deskside"
+              title="About Deskside"
             >
               ?
             </button>
@@ -610,6 +624,20 @@ export default function Home() {
           </div>
         </motion.div>
       )}
+      </AnimatePresence>
+
+      {/* ═══ LIBRARY OVERLAY ═══ */}
+      <AnimatePresence>
+        {showLibrary && (
+          <LibraryOverlay
+            onClose={() => setShowLibrary(false)}
+            onSelectVideo={(idx) => {
+              setCurrentIndex(idx);
+              setShowLibrary(false);
+            }}
+            gridVideos={videos}
+          />
+        )}
       </AnimatePresence>
 
       {/* ═══ CHANNEL BUG (appears on channel switch) ═══ */}
