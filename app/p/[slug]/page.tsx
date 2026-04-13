@@ -1,16 +1,28 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { VideoTile } from "@/components/VideoTile";
+import { GenreBadge } from "@/components/GenreBadge";
+import Image from "next/image";
+import ReactPlayer from "react-player";
 import Link from "next/link";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  LayoutGrid,
+} from "lucide-react";
 
 /**
  * Playlist view — /p/[slug]
  *
- * Renders a user's curated playlist. Public playlists are viewable
- * without auth. Shareable URL.
+ * Standalone video-first player scoped to a playlist.
+ * Public playlists viewable without auth. Shareable URL.
  */
 
 export default function PlaylistPage() {
@@ -19,28 +31,66 @@ export default function PlaylistPage() {
 
   const playlist = useQuery(api.playlists.getBySlug, { slug });
 
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const playerRef = useRef<any>(null);
+
+  const videos = playlist?.videos ?? [];
+  const currentVideo = videos[currentIndex];
+
+  const handleNext = useCallback(() => {
+    setCurrentIndex((i) => (videos.length ? (i + 1) % videos.length : 0));
+  }, [videos.length]);
+
+  const handlePrev = useCallback(() => {
+    setCurrentIndex((i) => (videos.length ? (i - 1 + videos.length) % videos.length : 0));
+  }, [videos.length]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement) return;
+      switch (e.key) {
+        case "ArrowRight": case "l": e.preventDefault(); handleNext(); break;
+        case "ArrowLeft": case "j": e.preventDefault(); handlePrev(); break;
+        case " ": case "k": e.preventDefault(); setIsPlaying((p) => !p); break;
+        case "m": e.preventDefault(); setIsMuted((m) => !m); break;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleNext, handlePrev]);
+
   if (playlist === undefined) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-text-tertiary font-mono text-sm">
-          LOADING PLAYLIST...
-        </div>
+      <div className="fixed inset-0 bg-bg flex items-center justify-center">
+        <div className="animate-pulse text-accent-yellow font-display text-2xl">LOADING...</div>
       </div>
     );
   }
 
   if (playlist === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="border-[3px] border-border border-dashed p-12 text-center">
-          <p className="font-display text-xl text-text-secondary">
-            PLAYLIST NOT FOUND
-          </p>
-          <Link
-            href="/"
-            className="inline-block mt-4 font-sans text-accent-cyan text-sm hover:underline"
-          >
-            BACK TO GRID
+      <div className="fixed inset-0 bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <p className="font-display text-2xl text-text-secondary mb-4">PLAYLIST NOT FOUND</p>
+          <Link href="/" className="font-sans text-accent-cyan text-sm hover:underline">
+            GO TO DESKSIDE
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentVideo) {
+    return (
+      <div className="fixed inset-0 bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <p className="font-display text-2xl text-text-secondary mb-2">{playlist.name.toUpperCase()}</p>
+          <p className="font-sans text-text-tertiary mb-4">This playlist is empty.</p>
+          <Link href="/" className="font-sans text-accent-cyan text-sm hover:underline">
+            GO TO DESKSIDE
           </Link>
         </div>
       </div>
@@ -48,65 +98,89 @@ export default function PlaylistPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      {/* Top bar */}
-      <header className="h-[72px] border-b-[3px] border-border flex items-center justify-between px-6">
-        <Link
-          href="/"
-          className="font-display text-2xl tracking-tight text-text-primary hover:text-accent-yellow transition-colors"
-        >
-          DESKSIDE
-        </Link>
-      </header>
+    <div className="fixed inset-0 bg-bg overflow-hidden">
+      {/* Video */}
+      <div className="absolute inset-0 w-full h-full">
+        <ReactPlayer
+          ref={playerRef}
+          src={`https://www.youtube.com/watch?v=${currentVideo.youtubeId}`}
+          playing={isPlaying}
+          muted={isMuted}
+          controls={false}
+          width="100%"
+          height="100%"
+          style={{ position: "absolute", top: 0, left: 0 }}
+          onReady={() => setIsPlaying(true)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={handleNext}
+        />
+      </div>
 
-      <main className="max-w-[1760px] mx-auto px-6 py-8">
-        {/* Playlist header */}
-        <section className="border-[3px] border-border p-8 mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="font-sans font-bold text-xs text-accent-pink uppercase tracking-widest">
-              PLAYLIST
-            </span>
-            {playlist.isPublic && (
-              <span className="font-sans font-bold text-xs text-accent-lime uppercase tracking-widest">
-                · PUBLIC
-              </span>
-            )}
-          </div>
-          <h1 className="font-display text-4xl text-text-primary">
-            {playlist.name.toUpperCase()}
-          </h1>
-          {playlist.description && (
-            <p className="font-sans text-text-secondary text-base mt-2">
-              {playlist.description}
-            </p>
-          )}
-          <p className="font-sans text-text-tertiary text-xs mt-4">
-            {playlist.videos.length} concerts
-          </p>
-        </section>
+      {/* Gradient overlay */}
+      <div className="absolute top-0 left-0 right-0 h-20 z-10 bg-gradient-to-b from-bg/80 to-transparent pointer-events-none" />
 
-        {/* Grid */}
-        {playlist.videos.length === 0 ? (
-          <div className="border-[3px] border-border border-dashed p-12 text-center">
-            <p className="font-display text-xl text-text-secondary">
-              THIS PLAYLIST IS EMPTY.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
-            {playlist.videos.map((video) => (
-              <VideoTile
+      {/* Bottom bar */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-[rgba(10,10,15,0.85)] backdrop-blur-[16px] border-t border-border/20">
+        {/* Filmstrip */}
+        <div className="px-4 pt-3 pb-2 overflow-x-auto">
+          <div className="flex gap-2" style={{ minWidth: "max-content" }}>
+            {videos.map((video, i) => (
+              <button
                 key={video.youtubeId}
-                youtubeId={video.youtubeId}
-                artist={video.artist ?? "Unknown Artist"}
-                songTitle={video.songTitle ?? ""}
-                thumbnailUrl={video.thumbnailUrl}
-                primaryGenre={video.primaryGenre}
-              />
+                onClick={() => setCurrentIndex(i)}
+                className={`flex-shrink-0 w-32 transition-all ${
+                  i === currentIndex ? "ring-2 ring-accent-yellow" : "opacity-70 hover:opacity-100"
+                }`}
+              >
+                <div className="relative aspect-video overflow-hidden">
+                  <Image src={video.thumbnailUrl} alt={video.artist} fill sizes="128px" className="object-cover" />
+                </div>
+                <p className="text-[10px] text-text-secondary font-sans truncate mt-1 px-0.5">{video.artist}</p>
+              </button>
             ))}
           </div>
-        )}
-      </main>
+        </div>
+
+        {/* Transport */}
+        <div className="flex items-center px-4 py-2 gap-4">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link
+              href="/"
+              className="p-2.5 border-2 border-border/40 text-text-primary hover:text-accent-yellow hover:border-accent-yellow transition-colors"
+            >
+              <LayoutGrid size={18} strokeWidth={2.5} />
+            </Link>
+            <div className="px-3 py-1.5 border-2 border-accent-pink/50 text-accent-pink text-xs font-sans font-bold uppercase tracking-wider">
+              {playlist.name}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-1 justify-center">
+            <div className="hidden sm:block min-w-0 max-w-[200px] mr-2">
+              <p className="font-sans font-bold text-xs text-text-primary truncate">{currentVideo.artist}</p>
+            </div>
+            <button onClick={handlePrev} className="p-2 text-text-primary hover:text-accent-yellow transition-colors">
+              <SkipBack size={20} strokeWidth={2.5} />
+            </button>
+            <button onClick={() => setIsPlaying((p) => !p)} className="p-2 text-text-primary hover:text-accent-yellow transition-colors">
+              {isPlaying ? <Pause size={24} strokeWidth={2.5} /> : <Play size={24} strokeWidth={2.5} />}
+            </button>
+            <button onClick={handleNext} className="p-2 text-text-primary hover:text-accent-yellow transition-colors">
+              <SkipForward size={20} strokeWidth={2.5} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={() => setIsMuted((m) => !m)} className="p-2 text-text-secondary hover:text-accent-yellow transition-colors">
+              {isMuted ? <VolumeX size={16} strokeWidth={2.5} /> : <Volume2 size={16} strokeWidth={2.5} />}
+            </button>
+            <span className="text-text-tertiary font-mono text-xs ml-2">
+              {currentIndex + 1} / {videos.length}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
