@@ -660,7 +660,7 @@ export default function Home() {
       </AnimatePresence>
 
       {/* ═══ KEYBOARD HINTS ═══ */}
-      <KeyboardHints visible={showKeyHints && splashDismissed && !showGrid && !showInfo} />
+      <KeyboardHints visible={showKeyHints && splashDismissed && !showGrid && !showInfo} onDismiss={() => setShowKeyHints(false)} />
 
       {/* ═══ ABOUT MODAL ═══ */}
       <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} />

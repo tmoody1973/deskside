@@ -1,12 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { X } from "lucide-react";
 
 interface KeyboardHintsProps {
   visible: boolean;
+  onDismiss: () => void;
 }
 
-export function KeyboardHints({ visible }: KeyboardHintsProps) {
+export function KeyboardHints({ visible, onDismiss }: KeyboardHintsProps) {
   if (!visible) return null;
 
   return (
@@ -16,9 +18,18 @@ export function KeyboardHints({ visible }: KeyboardHintsProps) {
       exit={{ opacity: 0 }}
       className="absolute bottom-24 right-4 z-20 bg-bg/80 backdrop-blur-sm border border-border-dim p-3 space-y-1"
     >
-      <p className="text-text-tertiary text-[10px] font-sans font-bold uppercase tracking-widest mb-2">
-        Keyboard Shortcuts
-      </p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-text-tertiary text-[10px] font-sans font-bold uppercase tracking-widest">
+          Keyboard Shortcuts
+        </p>
+        <button
+          onClick={onDismiss}
+          className="text-text-tertiary hover:text-text-primary transition-colors"
+          aria-label="Dismiss"
+        >
+          <X size={14} strokeWidth={2.5} />
+        </button>
+      </div>
       {[
         ["Space", "Play / Pause"],
         ["← →", "Prev / Next"],
@@ -36,9 +47,6 @@ export function KeyboardHints({ visible }: KeyboardHintsProps) {
           <span className="text-text-tertiary text-[10px] font-sans">{label}</span>
         </div>
       ))}
-      <p className="text-text-tertiary text-[9px] font-sans mt-2 italic">
-        Press any key to dismiss
-      </p>
     </motion.div>
   );
 }
