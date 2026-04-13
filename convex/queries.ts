@@ -1,147 +1,154 @@
-import { query } from "./_generated/server";
+import { query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 
 // ═══════════════════════════════════════════════════════════════
 // Central helper: get latest classification for a video.
-// DRY: all grid/filter/search queries use this instead of
-// inlining the join. (Eng review issue #7)
+// DRY: all queries use this. No `any` types. (Eng review #7, I1)
 // ═══════════════════════════════════════════════════════════════
 
-async function getLatestClassification(
-  ctx: { db: Doc<"videos">["_id"] extends Id<"videos"> ? any : never },
-  videoId: Id<"videos">
-) {
-  // Workaround: ctx typing is complex in Convex helpers
-  const db = (ctx as any).db;
-  return await db
+async function getLatestClassification(ctx: QueryCtx, videoId: Id<"videos">) {
+  return await ctx.db
     .query("classifications")
-    .withIndex("by_videoId_classifiedAt", (q: any) =>
-      q.eq("videoId", videoId)
-    )
+    .withIndex("by_videoId_classifiedAt", (q) => q.eq("videoId", videoId))
     .order("desc")
     .first();
 }
 
+// Shared: build a video result object from video + classification
+function buildVideoResult(
+  video: Doc<"videos">,
+  classification: Doc<"classifications"> | null
+) {
+  return {
+    _id: video._id,
+    youtubeId: video.youtubeId,
+    artist: video.parsedArtist ?? video.rawTitle.split(":")[0]?.trim() ?? "",
+    songTitle: video.parsedSongTitle ?? "",
+    thumbnailUrl: video.thumbnailUrl,
+    primaryGenre: classification?.primaryGenre ?? "pending",
+    moods: classification?.moods ?? [],
+    era: classification?.era ?? "",
+    vibeTags: classification?.vibeTags ?? [],
+    confidence: classification?.confidence ?? 0,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════
-// Grid: paginated list of classified videos with their tags
+// Grid: paginated video list. Uses classification index for genre
+// filter instead of loading all videos. (C2 fix)
 // ═══════════════════════════════════════════════════════════════
 
 export const getGridVideos = query({
   args: {
     genre: v.optional(v.string()),
     limit: v.optional(v.number()),
-    cursor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 32;
+    const limit = args.limit ?? 40;
 
-    // Get classified videos (includes classified, artist_linked, complete)
-    // For now, get all classified+ videos and filter client-side for genre
-    const allStatuses = ["classified", "artist_linked", "complete"] as const;
-    let allVideos: Doc<"videos">[] = [];
+    if (args.genre) {
+      // Genre filter: query classifications by primaryGenre index,
+      // then look up videos. Avoids loading all 1,402 videos.
+      const classifications = await ctx.db
+        .query("classifications")
+        .withIndex("by_primaryGenre", (q) => q.eq("primaryGenre", args.genre!))
+        .take(limit * 2); // Over-fetch to account for versioned dupes
 
-    for (const status of allStatuses) {
+      // Dedupe by videoId (take latest per video)
+      const seen = new Set<string>();
+      const results = [];
+
+      for (const c of classifications) {
+        const vidId = c.videoId as string;
+        if (seen.has(vidId)) continue;
+        seen.add(vidId);
+
+        const video = await ctx.db.get(c.videoId);
+        if (!video || !video.isAvailable) continue;
+
+        results.push(buildVideoResult(video, c));
+        if (results.length >= limit) break;
+      }
+
+      return results;
+    }
+
+    // No genre filter: get artist_linked videos (most common status)
+    // then classified, using .take() instead of .collect()
+    const statuses = ["artist_linked", "classified", "complete"] as const;
+    const results = [];
+
+    for (const status of statuses) {
+      if (results.length >= limit) break;
+
       const videos = await ctx.db
         .query("videos")
-        .withIndex("by_enrichmentStatus", (q) =>
-          q.eq("enrichmentStatus", status)
-        )
-        .collect();
-      allVideos = [...allVideos, ...videos];
+        .withIndex("by_enrichmentStatus", (q) => q.eq("enrichmentStatus", status))
+        .take(limit - results.length);
+
+      for (const video of videos) {
+        if (!video.isAvailable) continue;
+        const classification = await getLatestClassification(ctx, video._id);
+        if (!classification) continue;
+        results.push(buildVideoResult(video, classification));
+      }
     }
 
-    // Join with classifications
-    const results = [];
-    for (const video of allVideos) {
-      const classification = await ctx.db
-        .query("classifications")
-        .withIndex("by_videoId_classifiedAt", (q) =>
-          q.eq("videoId", video._id)
-        )
-        .order("desc")
-        .first();
-
-      if (!classification) continue;
-
-      // Genre filter
-      if (args.genre && classification.primaryGenre !== args.genre) continue;
-
-      results.push({
-        _id: video._id,
-        youtubeId: video.youtubeId,
-        artist: video.parsedArtist ?? video.rawTitle.split(":")[0]?.trim(),
-        songTitle: video.parsedSongTitle ?? "",
-        thumbnailUrl: video.thumbnailUrl,
-        primaryGenre: classification.primaryGenre,
-        moods: classification.moods,
-        era: classification.era,
-        vibeTags: classification.vibeTags,
-        confidence: classification.confidence,
-      });
-    }
-
-    // Sort by publish date (newest first) and paginate
-    return results.slice(0, limit);
+    return results;
   },
 });
 
 // ═══════════════════════════════════════════════════════════════
-// Genre list: distinct genres for filter dropdown
+// Genre list: uses primaryGenre index for counting. (C3 fix)
+// Queries each known genre separately instead of full table scan.
 // ═══════════════════════════════════════════════════════════════
+
+import { PRIMARY_GENRES } from "../lib/classification-prompt";
 
 export const getAvailableGenres = query({
   args: {},
   handler: async (ctx) => {
-    const classifications = await ctx.db
-      .query("classifications")
-      .collect();
+    const results = [];
 
-    const genreCounts: Record<string, number> = {};
-    for (const c of classifications) {
-      genreCounts[c.primaryGenre] = (genreCounts[c.primaryGenre] || 0) + 1;
+    for (const genre of PRIMARY_GENRES) {
+      // Count by querying with the index and collecting just IDs
+      const count = await ctx.db
+        .query("classifications")
+        .withIndex("by_primaryGenre", (q) => q.eq("primaryGenre", genre))
+        .collect()
+        .then((rows) => rows.length);
+
+      if (count > 0) {
+        results.push({ genre, count });
+      }
     }
 
-    return Object.entries(genreCounts)
-      .map(([genre, count]) => ({ genre, count }))
-      .sort((a, b) => b.count - a.count);
+    return results.sort((a, b) => b.count - a.count);
   },
 });
 
 // ═══════════════════════════════════════════════════════════════
-// Random video (SURPRISE ME button, CEO cherry-pick #6)
+// Random video (SURPRISE ME) — queries all enriched statuses (S1 fix)
 // ═══════════════════════════════════════════════════════════════
 
 export const getRandomVideo = query({
   args: {},
   handler: async (ctx) => {
+    // Sample from artist_linked (most videos end up here)
     const videos = await ctx.db
       .query("videos")
       .withIndex("by_enrichmentStatus", (q) =>
-        q.eq("enrichmentStatus", "classified")
+        q.eq("enrichmentStatus", "artist_linked")
       )
-      .collect();
+      .take(200);
 
     if (videos.length === 0) return null;
 
     const random = videos[Math.floor(Math.random() * videos.length)];
-    const classification = await ctx.db
-      .query("classifications")
-      .withIndex("by_videoId_classifiedAt", (q) =>
-        q.eq("videoId", random._id)
-      )
-      .order("desc")
-      .first();
+    const classification = await getLatestClassification(ctx, random._id);
 
-    return {
-      _id: random._id,
-      youtubeId: random.youtubeId,
-      artist: random.parsedArtist ?? random.rawTitle.split(":")[0]?.trim(),
-      songTitle: random.parsedSongTitle ?? "",
-      thumbnailUrl: random.thumbnailUrl,
-      primaryGenre: classification?.primaryGenre,
-      moods: classification?.moods,
-    };
+    return buildVideoResult(random, classification);
   },
 });
 
@@ -163,22 +170,8 @@ export const searchVideos = query({
 
     const results = [];
     for (const video of videos) {
-      const classification = await ctx.db
-        .query("classifications")
-        .withIndex("by_videoId_classifiedAt", (q) =>
-          q.eq("videoId", video._id)
-        )
-        .order("desc")
-        .first();
-
-      results.push({
-        _id: video._id,
-        youtubeId: video.youtubeId,
-        artist: video.parsedArtist ?? video.rawTitle.split(":")[0]?.trim(),
-        songTitle: video.parsedSongTitle ?? "",
-        thumbnailUrl: video.thumbnailUrl,
-        primaryGenre: classification?.primaryGenre ?? "pending",
-      });
+      const classification = await getLatestClassification(ctx, video._id);
+      results.push(buildVideoResult(video, classification));
     }
 
     return results;
@@ -199,17 +192,10 @@ export const getVideoDetails = query({
 
     if (!video) return null;
 
-    const classification = await ctx.db
-      .query("classifications")
-      .withIndex("by_videoId_classifiedAt", (q) =>
-        q.eq("videoId", video._id)
-      )
-      .order("desc")
-      .first();
+    const classification = await getLatestClassification(ctx, video._id);
 
-    // Get artist + editorial if linked
-    let artist = null;
-    let editorial = null;
+    let artist: Doc<"artists"> | null = null;
+    let editorial: Doc<"artistEditorial"> | null = null;
     if (video.artistId) {
       artist = await ctx.db.get(video.artistId);
       if (artist) {
@@ -226,7 +212,7 @@ export const getVideoDetails = query({
       rawTitle: video.rawTitle,
       description: video.description,
       publishedAt: video.publishedAt,
-      artist: video.parsedArtist ?? video.rawTitle.split(":")[0]?.trim(),
+      artist: video.parsedArtist ?? video.rawTitle.split(":")[0]?.trim() ?? "",
       songTitle: video.parsedSongTitle ?? "",
       primaryGenre: classification?.primaryGenre,
       subGenres: classification?.subGenres,
@@ -236,14 +222,12 @@ export const getVideoDetails = query({
       region: classification?.region,
       vibeTags: classification?.vibeTags,
       confidence: classification?.confidence,
-      // Artist enrichment data
       spotifyGenres: artist?.spotifyGenres,
       spotifyPopularity: artist?.spotifyPopularity,
       spotifyImageUrl: artist?.spotifyImageUrl,
       discogsCountry: artist?.discogsCountry,
       musicbrainzCountry: artist?.musicbrainzCountry,
       musicbrainzBeginDate: artist?.musicbrainzBeginDate,
-      // Editorial
       editorial: editorial?.editorial,
       sonicDNA: editorial?.sonicDNA,
       ifYouLike: editorial?.ifYouLike,
@@ -254,7 +238,7 @@ export const getVideoDetails = query({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// Pipeline status (dev/admin)
+// Pipeline status (dev/admin only — single source, removed dupe I5)
 // ═══════════════════════════════════════════════════════════════
 
 export const getPipelineStatus = query({
@@ -280,42 +264,5 @@ export const getPipelineStatus = query({
     }
 
     return counts;
-  },
-});
-
-export const getSampleClassifiedVideos = query({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    const videos = await ctx.db
-      .query("videos")
-      .withIndex("by_enrichmentStatus", (q) =>
-        q.eq("enrichmentStatus", "classified")
-      )
-      .take(args.limit ?? 10);
-
-    const results = [];
-    for (const video of videos) {
-      const classification = await ctx.db
-        .query("classifications")
-        .withIndex("by_videoId_classifiedAt", (q) =>
-          q.eq("videoId", video._id)
-        )
-        .order("desc")
-        .first();
-
-      results.push({
-        youtubeId: video.youtubeId,
-        artist: video.parsedArtist,
-        songTitle: video.parsedSongTitle,
-        primaryGenre: classification?.primaryGenre,
-        moods: classification?.moods,
-        era: classification?.era,
-        region: classification?.region,
-        vibeTags: classification?.vibeTags,
-        confidence: classification?.confidence,
-      });
-    }
-
-    return results;
   },
 });

@@ -423,22 +423,4 @@ export const getVideoById = internalQuery({
   },
 });
 
-export const getPipelineStatus = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const statuses = ["pending", "parsed", "classified", "artist_linked", "complete"] as const;
-    const counts: Record<string, number> = {};
-
-    for (const status of statuses) {
-      const videos = await ctx.db
-        .query("videos")
-        .withIndex("by_enrichmentStatus", (q) =>
-          q.eq("enrichmentStatus", status)
-        )
-        .collect();
-      counts[status] = videos.length;
-    }
-
-    return counts;
-  },
-});
+// getPipelineStatus removed — use queries:getPipelineStatus (single source, I5 fix)
