@@ -418,11 +418,11 @@ export default function Home() {
                 setChannelBug(bugText);
                 setTimeout(() => setChannelBug(null), 3000);
               }}
-              className="bg-transparent border-2 border-border/40 text-text-primary font-sans text-xs uppercase tracking-wider px-3 py-2 appearance-none cursor-pointer hover:border-accent-yellow transition-colors"
+              className="bg-bg-elevated border-2 border-border/40 text-text-primary font-sans text-xs uppercase tracking-wider px-3 py-2 cursor-pointer hover:border-accent-yellow transition-colors"
             >
-              <option value="">ALL CHANNELS</option>
+              <option value="" className="bg-bg-elevated text-text-primary">ALL CHANNELS</option>
               {genres?.map(({ genre }) => (
-                <option key={genre} value={genre}>
+                <option key={genre} value={genre} className="bg-bg-elevated text-text-primary">
                   {genre.toUpperCase()}
                 </option>
               ))}
