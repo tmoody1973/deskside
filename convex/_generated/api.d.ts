@@ -16,6 +16,7 @@ import type * as crons from "../crons.js";
 import type * as editorialSynth from "../editorialSynth.js";
 import type * as enrichment from "../enrichment.js";
 import type * as favorites from "../favorites.js";
+import type * as featured from "../featured.js";
 import type * as ingest from "../ingest.js";
 import type * as playlists from "../playlists.js";
 import type * as queries from "../queries.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   editorialSynth: typeof editorialSynth;
   enrichment: typeof enrichment;
   favorites: typeof favorites;
+  featured: typeof featured;
   ingest: typeof ingest;
   playlists: typeof playlists;
   queries: typeof queries;

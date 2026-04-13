@@ -298,12 +298,12 @@ export const processBatch = internalAction({
 export const startSynthesis = action({
   args: {},
   handler: async (ctx): Promise<string> => {
-    await ctx.runAction(internal.editorialSynth.processBatch, {});
+    // Schedule, don't await — avoids action timeout
+    await ctx.scheduler.runAfter(0, internal.editorialSynth.processBatch, {});
     return "Editorial synthesis started. Batches will self-schedule.";
   },
 });
 
-// Run 5-artist sample for quality gate
 export const runSample = action({
   args: {},
   handler: async (ctx): Promise<string> => {
@@ -314,12 +314,13 @@ export const runSample = action({
 
     if (artists.length === 0) return "No artists need editorial synthesis.";
 
+    // Fan out: schedule each, don't await sequentially
     for (const artist of artists) {
-      await ctx.runAction(internal.editorialSynth.synthesizeArtist, {
+      await ctx.scheduler.runAfter(0, internal.editorialSynth.synthesizeArtist, {
         artistId: artist._id,
       });
     }
 
-    return `Sample complete. Synthesized editorial for: ${artists.map((a) => a.name).join(", ")}`;
+    return `Sample scheduled for: ${artists.map((a) => a.name).join(", ")}`;
   },
 });

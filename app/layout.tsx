@@ -24,7 +24,18 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "DESKSIDE",
   description:
-    "A channel-surfing interface for live music concerts. Browse by genre, mood, and era.",
+    "1,400+ live concerts. Classified by genre, mood, and vibe. Flip through like a TV.",
+  openGraph: {
+    title: "DESKSIDE",
+    description: "1,400+ live concerts. Classified by genre, mood, and vibe. Flip through like a TV.",
+    images: ["/api/og?title=DESKSIDE&subtitle=Every+live+concert.+Every+genre.+Flip+through."],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "DESKSIDE",
+    description: "1,400+ live concerts. Classified by genre, mood, and vibe.",
+    images: ["/api/og?title=DESKSIDE&subtitle=Every+live+concert.+Every+genre.+Flip+through."],
+  },
 };
 
 export default function RootLayout({

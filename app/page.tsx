@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { UserActions } from "@/components/UserActions";
 import { LibraryOverlay } from "@/components/LibraryOverlay";
+import { AboutModal } from "@/components/AboutModal";
+import { KeyboardHints } from "@/components/KeyboardHints";
 
 /**
  * Deskside — video-first interface.
@@ -657,127 +659,12 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* ═══ KEYBOARD HINTS (first visit, dismisses on any keypress) ═══ */}
-      {showKeyHints && splashDismissed && !showGrid && !showInfo && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          className="absolute bottom-24 right-4 z-20 bg-bg/80 backdrop-blur-sm border border-border-dim p-3 space-y-1"
-        >
-          <p className="text-text-tertiary text-[10px] font-sans font-bold uppercase tracking-widest mb-2">
-            Keyboard Shortcuts
-          </p>
-          {[
-            ["Space", "Play / Pause"],
-            ["← →", "Prev / Next"],
-            ["G", "Open Grid"],
-            ["I", "Artist Info"],
-            ["S", "Shuffle"],
-            ["C", "Captions"],
-            ["M", "Mute"],
-          ].map(([key, label]) => (
-            <div key={key} className="flex items-center gap-2">
-              <span className="inline-block px-1.5 py-0.5 text-[10px] font-mono bg-accent-cyan text-bg font-bold min-w-[28px] text-center">
-                {key}
-              </span>
-              <span className="text-text-tertiary text-[10px] font-sans">{label}</span>
-            </div>
-          ))}
-          <p className="text-text-tertiary text-[9px] font-sans mt-2 italic">
-            Press any key to dismiss
-          </p>
-        </motion.div>
-      )}
+      {/* ═══ KEYBOARD HINTS ═══ */}
+      <KeyboardHints visible={showKeyHints && splashDismissed && !showGrid && !showInfo} />
 
       {/* ═══ ABOUT MODAL ═══ */}
-      <AnimatePresence>
-        {showAbout && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 bg-bg/90 backdrop-blur-sm flex items-center justify-center p-8"
-            onClick={() => setShowAbout(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-bg-elevated border-[3px] border-border shadow-retro p-8 max-w-lg w-full"
-            >
-              <button
-                onClick={() => setShowAbout(false)}
-                className="absolute top-4 right-4 text-text-primary hover:text-accent-yellow"
-                aria-label="Close"
-              >
-                <X size={20} strokeWidth={2.5} />
-              </button>
+      <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} />
 
-              <h2 className="font-display text-3xl text-text-primary mb-2">
-                DESKSIDE
-              </h2>
-              <div className="h-[3px] bg-accent-yellow w-16 mb-6" />
-
-              <div className="space-y-4 font-sans text-text-secondary text-sm leading-relaxed">
-                <p>
-                  Deskside is a channel-surfing interface for live music concerts.
-                  1,400+ performances classified by genre, mood, era, and vibe using AI.
-                  Browse by channel, flip through like cable TV, read liner notes
-                  written in a crate-digger voice.
-                </p>
-                <p>
-                  Built by{" "}
-                  <span className="text-text-primary font-bold">Tarik Moody</span>,
-                  Director of Strategy and Innovation at Radio Milwaukee.
-                </p>
-
-                <div className="border-t border-border-dim pt-4 mt-4">
-                  <p className="text-text-tertiary text-xs">
-                    Deskside is an unofficial fan project. It is not affiliated with,
-                    endorsed by, or connected to NPR or the Tiny Desk Concert series.
-                    All video content is embedded from YouTube via the official IFrame API
-                    and is not downloaded or re-hosted. Artist data sourced from MusicBrainz,
-                    Spotify, and Discogs.
-                  </p>
-                  <a
-                    href="https://www.npr.org/series/tiny-desk-concerts/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block mt-3 text-accent-cyan text-xs hover:underline"
-                  >
-                    Visit NPR&apos;s official Tiny Desk Concert page →
-                  </a>
-                </div>
-
-                <div className="border-t border-border-dim pt-4">
-                  <p className="text-text-tertiary text-[10px] uppercase tracking-widest">
-                    Keyboard Shortcuts
-                  </p>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2">
-                    {[
-                      ["Space / K", "Play / Pause"],
-                      ["← → / J L", "Prev / Next"],
-                      ["G", "Open Grid"],
-                      ["I", "Artist Info"],
-                      ["S", "Shuffle"],
-                      ["C", "Captions"],
-                      ["M", "Mute"],
-                      ["H", "Toggle Filmstrip"],
-                    ].map(([key, label]) => (
-                      <div key={key} className="flex items-center gap-2">
-                        <span className="text-accent-cyan font-mono text-[10px]">{key}</span>
-                        <span className="text-text-tertiary text-[10px]">{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ═══ INFO OVERLAY (slides from right) ═══ */}
       <AnimatePresence>
