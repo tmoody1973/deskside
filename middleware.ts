@@ -1,8 +1,10 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 
+// Use Node.js runtime instead of Edge (Clerk modules not Edge-compatible)
+export const runtime = "nodejs";
+
 // Clerk middleware — all routes are public by default.
 // Auth is only required for mutations (favorites, playlists, channels).
-// The middleware just makes the auth state available.
 export default clerkMiddleware();
 
 export const config = {
